@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cronograma Industrial | Motherson</title>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/pt-br.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/en.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/es.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/locale/de.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isBetween.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/minMax.js"></script>
+    <script>
+        dayjs.locale('pt-br');
+        dayjs.extend(window.dayjs_plugin_isBetween);
+        dayjs.extend(window.dayjs_plugin_minMax);
+    </script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="toast-container" class="toast-container"></div>
+<div id="custom-tooltip" class="no-mobile"></div>
+
+<div id="context-menu" class="context-menu">
+    <div class="cm-item" onclick="cmAcao(event, 'concluir')">
+        <svg viewBox="0 0 24 24"><path fill="#28a745" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> <span data-i18n="cmComplete">Concluir (100%)</span>
+    </div>
+    <div class="cm-item" onclick="cmAcao(event, 'suporte')">
+        <svg viewBox="0 0 24 24"><path fill="#ffc107" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg> <span data-i18n="cmAtt">Marcar Atenção</span>
+    </div>
+    <div class="cm-item" onclick="cmAcao(event, 'informativo')">
+        <svg viewBox="0 0 24 24"><path fill="#007bff" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg> <span data-i18n="cmNorm">Status Normal</span>
+    </div>
+    <div class="cm-divider"></div>
+    <div class="cm-item cm-danger" onclick="cmAcao(event, 'excluir')">
+        <svg viewBox="0 0 24 24"><path fill="#dc3545" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg> <span data-i18n="cmDel">Excluir Ação</span>
+    </div>
+</div>
+
+<div class="toolbar no-print">
+    <div class="header-container">
+        <div class="logo-title-wrapper">
+            <img src="logo.png" alt="Motherson Logo" class="main-logo">
+            <div class="title-group">
+                <h2 id="main-title" data-i18n="title">Cronograma Engenharia Industrial</h2>
+                <div class="subtitle-group">
+                    <span id="data-header" data-i18n="connecting">Conectando ao banco de dados...</span>
+                    <span id="sync-icon" data-i18n-title="syncTitle" title="Sincronização em tempo real">🟢</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="kpi-dashboard" class="kpi-container">
+            <div class="kpi-card">
+                <div class="kpi-chart-container"><div class="donut-chart" id="donut-progresso"><span id="kpi-progresso-total" class="donut-text">0%</span></div></div>
+                <div class="kpi-info"><span class="kpi-label" data-i18n="kpi1">Ações Concluídas</span><span class="kpi-desc" data-i18n="kpi1desc">Progresso global</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-chart-container"><div class="status-circle delayed" id="circle-atrasos"><span id="kpi-atrasos" class="donut-text">0</span></div></div>
+                <div class="kpi-info"><span class="kpi-label" data-i18n="kpi2">Atrasos Críticos</span><span class="kpi-desc" data-i18n="kpi2desc">Fora do prazo</span></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-chart-container"><div class="status-circle milestone-badge" id="circle-milestones"><span id="kpi-milestones" class="donut-text">0</span></div></div>
+                <div class="kpi-info"><span class="kpi-label" data-i18n="kpi3">Marcos de Entrega</span><span class="kpi-desc" data-i18n="kpi3desc">Milestones</span></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="controls-wrapper">
+        <div class="toolbar-actions">
+            <div class="filtros-container">
+                <input type="text" id="filtro-busca" data-i18n-placeholder="search" placeholder="Buscar ação..." oninput="debounceBusca()">
+                <select id="filtro-ano-view" onchange="trocarAno()"></select>
+                <select id="filtro-escala" onchange="gerarMatriz()">
+                    <option value="diario" data-i18n="zoomDay">Zoom Diário</option>
+                    <option value="semanal" data-i18n="zoomWeek">Zoom Semanal</option>
+                    <option value="mensal" data-i18n="zoomMonth">Zoom Mensal</option>
+                </select>
+                <select id="filtro-proj-view" onchange="atualizarFiltroAreasGlobais(); salvarFiltros(); gerarMatriz();"></select>
+                <select id="filtro-area-view" onchange="salvarFiltros(); gerarMatriz()"></select>
+                <select id="filtro-resp-view" onchange="salvarFiltros(); gerarMatriz()"></select>
+            </div>
+            
+            <div class="button-group">
+                <select id="filtro-idioma" onchange="mudarIdioma()">
+                    <option value="pt-br">🇧🇷 PT</option>
+                    <option value="en">🇺🇸 EN</option>
+                    <option value="de">🇩🇪 DE</option>
+                    <option value="es">🇪🇸 ES</option>
+                </select>
+                <button id="btn-tema" class="btn btn-clear no-mobile" onclick="toggleTheme()">
+                    <span id="tema-icone"></span>
+                    <span data-i18n="btnTheme">Tema</span>
+                </button>
+                <button class="btn btn-warning" onclick="abrirModalConfig()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H5.78a1.65 1.65 0 0 0-1.51 1 1.65 1.65 0 0 0 .33 1.82l.07.09A10 10 0 0 0 12 17.66a10 10 0 0 0 6.26-2.57z"/></svg> 
+                    <span data-i18n="btnSetup">Setup</span>
+                </button>
+                <button class="btn btn-hoje" onclick="irParaHoje(true)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg> 
+                    <span data-i18n="btnToday">Hoje</span>
+                </button>
+                <button class="btn btn-clear no-mobile" style="background:#6f42c1; color:white;" onclick="abrirModalHeatmap()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><circle cx="15" cy="8" r="4"/><path d="M5 18v2h14v-2a7 7 0 0 0-14 0z"/></svg> 
+                    <span data-i18n="btnHeatmap">Equipe</span>
+                </button>
+                <button class="btn btn-blue" onclick="abrirModalAcao(null)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg> 
+                    <span data-i18n="btnAdd">Adicionar Ação</span>
+                </button>
+                <button class="btn btn-excel no-mobile" onclick="exportarExcel()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg> 
+                    <span data-i18n="btnExcel">Excel</span>
+                </button>
+                <button class="btn no-mobile" style="background:#333;" onclick="abrirModalPrint()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V4h12v5"/><rect x="6" y="13" width="12" height="7" rx="1"/><path d="M18 9v4"/></svg> 
+                    <span data-i18n="btnPrint">Imprimir</span>
+                </button>
+            </div>
+        </div>
+        <div class="legend-container">
+            <div class="legend-item" id="leg-informativo" onclick="toggleFiltroStatus('informativo')"><div class="legend-color informativo"></div> <span data-i18n="legInfo">Informativo</span></div>
+            <div class="legend-item" id="leg-suporte" onclick="toggleFiltroStatus('suporte')"><div class="legend-color suporte"></div> <span data-i18n="legSup">Suporte / Atenção</span></div>
+            <div class="legend-item" id="leg-milestone" onclick="toggleFiltroStatus('milestone')"><div class="legend-color milestone"></div> <span data-i18n="legMile">Milestones Cliente</span></div>
+        </div>
+    </div>
+</div>
+
+<div id="gantt-container" class="fade-in">
+    <div style="padding: 20px;">
+        <div class="skeleton-box"></div>
+        <div class="skeleton-box" style="width: 70%;"></div>
+        <div class="skeleton-box" style="width: 85%;"></div>
+    </div>
+</div>
+
+<div id="print-layout" class="print-only"></div>
+
+<div id="modal-heatmap" class="modal-overlay no-print">
+    <div class="modal-content" style="max-width: 95vw; width: 1100px;">
+        <h2 data-i18n="heatmapTitle" style="margin-bottom: 5px;">Mapa de Carga da Equipe</h2>
+        <div style="font-size: 11px; color: #888; margin-bottom: 20px; font-weight: bold;" data-i18n="hmDesc">Cores indicam o volume de tarefas simultâneas: 1 a 2 (Verde), 3 a 4 (Amarelo), 5 ou mais (Vermelho/Sobrecarga).</div>
+        <div id="heatmap-container"></div>
+        <div class="modal-actions footer-right">
+            <button class="btn btn-clear" onclick="fecharModais()" data-i18n="btnClose">Fechar (Esc)</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-acao" class="modal-overlay no-print">
+    <div class="modal-content">
+        <h2 id="modal-titulo" data-i18n="modalTitle">Nova Ação</h2>
+        <input type="hidden" id="i-id">
+        <div class="form-group"><label data-i18n="lblProj">Projeto</label><select id="i-projeto" onchange="atualizarAreasDoModalAcao()"></select></div>
+        <div class="form-group"><label data-i18n="lblArea">Área / Setor</label><select id="i-area"></select></div>
+        <div class="form-row">
+            <div class="form-group"><label data-i18n="lblStart">Início</label><input type="date" id="i-inicio"></div>
+            <div class="form-group"><label data-i18n="lblEnd">Fim Previsto</label><input type="date" id="i-fim"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group" style="flex: 0 0 80px;"><label>%</label><input type="number" id="i-progresso" min="0" max="100"></div>
+            <div class="form-group" style="flex: 1;">
+                <label data-i18n="lblResp">Responsável (Múltiplo ou Texto Livre)</label>
+                <input type="text" id="i-responsavel" data-i18n-placeholder="phResp" onkeyup="renderRespTags()">
+                <div id="resp-sugestoes" class="resp-tags-container"></div>
+            </div>
+        </div>
+        <div class="form-group"><label data-i18n="lblClass">Classificação</label><select id="i-status">
+            <option value="informativo" data-i18n="optInfo">Informativo (Azul)</option>
+            <option value="suporte" data-i18n="optSup">Suporte / Atenção (Amarelo)</option>
+            <option value="milestone" data-i18n="optMile">Milestones Cliente (Laranja)</option>
+        </select></div>
+        <div class="form-group"><label data-i18n="lblDesc">Descrição Detalhada</label><input type="text" id="i-texto" data-i18n-placeholder="phDesc"></div>
+        <div class="form-group" style="border-top: 1px solid var(--border-color); margin-top: 15px; padding-top: 10px;">
+            <label style="color: var(--motherson-red);" data-i18n="lblCheck">Checklist de Subtarefas</label>
+            <div id="lista-subtarefas-modal"></div>
+            <div class="input-append">
+                <input type="text" id="nova-subtarefa-txt" data-i18n-placeholder="phSub" onkeypress="if(event.key==='Enter') adicionarSubtarefa()">
+                <button class="btn btn-blue" onclick="adicionarSubtarefa()">+</button>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-clear" id="btn-excluir" style="background: #dc3545; display:none;" onclick="apagarTarefaAtual()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 
+                <span data-i18n="btnDelete">Excluir</span>
+            </button>
+            <div class="right-btns">
+                <button class="btn btn-clear" onclick="fecharModais()" data-i18n="btnCancel">Cancelar (Esc)</button>
+                <button class="btn btn-green" id="btn-salvar-nuvem" onclick="salvarTarefa()" data-i18n="btnSave">Salvar Nuvem</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-config" class="modal-overlay no-print">
+    <div class="modal-content" style="max-width: 600px;">
+        <h2 id="setup-title" data-i18n="setupTitle">Configurações do Banco</h2>
+        <div class="config-grid">
+            <div class="config-section">
+                <h4 style="margin-top:0;" data-i18n="setupProj">Projetos Ativos</h4>
+                <div class="lista-itens" id="lista-projetos-config"></div>
+                <div style="display:flex; gap:5px; margin-bottom: 5px;">
+                    <div style="flex:1;"><label style="font-size:10px; color:#888; font-weight:bold;" data-i18n="lblStart">Início</label><input type="month" id="cfg-proj-inicio" style="width:100%; padding:6px; border:1px solid var(--border-color); border-radius:4px; font-family:inherit;"></div>
+                    <div style="flex:1;"><label style="font-size:10px; color:#888; font-weight:bold;" data-i18n="lblEnd">Fim</label><input type="month" id="cfg-proj-fim" style="width:100%; padding:6px; border:1px solid var(--border-color); border-radius:4px; font-family:inherit;"></div>
+                </div>
+                <div class="input-append"><input type="text" id="cfg-novo-proj" data-i18n-placeholder="phNewProj" style="flex:1; padding:8px; border:1px solid var(--border-color); border-radius:4px;"><button class="btn btn-blue" onclick="adicionarProjetoConfig()">+</button></div>
+            </div>
+            <div class="config-section">
+                <h4 style="margin-top:0;" data-i18n="setupSec">Setores por Projeto</h4>
+                <div class="lista-itens" id="lista-areas-config"></div>
+                <select id="cfg-area-proj" style="width: 100%; margin-bottom: 5px; padding:8px; border:1px solid var(--border-color); border-radius:4px;"></select>
+                <div class="input-append"><input type="text" id="cfg-nova-area" data-i18n-placeholder="phNewSec" style="flex:1; padding:8px; border:1px solid var(--border-color); border-radius:4px;"><button class="btn btn-blue" onclick="adicionarAreaConfig()">+</button></div>
+            </div>
+        </div>
+        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border-color);">
+            <h4 style="margin: 0 0 10px 0;" data-i18n="setupBackup">Segurança e Backup</h4>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-clear" style="background: #17a2b8;" onclick="exportarBackup()" data-i18n="btnExport">Exportar Dados</button>
+                <button class="btn btn-warning" onclick="document.getElementById('import-file').click()" data-i18n="btnImport">Importar Backup</button>
+                <input type="file" id="import-file" style="display:none" accept=".json" onchange="importarBackup(event)">
+            </div>
+        </div>
+        <div class="modal-actions footer-right"><button class="btn btn-clear" onclick="fecharModais()" data-i18n="btnClose">Fechar (Esc)</button></div>
+    </div>
+</div>
+
+<div id="modal-print" class="modal-overlay no-print">
+    <div class="modal-content" style="max-width: 400px;">
+        <h2 style="margin-top:0;" data-i18n="printTitle">Imprimir Cronograma</h2>
+        <div class="form-row">
+            <div class="form-group"><label data-i18n="lblStart">Início</label><input type="date" id="print-inicio"></div>
+            <div class="form-group"><label data-i18n="lblEnd">Fim</label><input type="date" id="print-fim"></div>
+        </div>
+        <div class="form-group" style="margin-top: 10px; display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.03); padding: 10px; border-radius: 4px; border: 1px solid var(--border-color);">
+            <input type="checkbox" id="print-inc-gantt" checked style="width: 16px; height: 16px; margin: 0; cursor: pointer;">
+            <label for="print-inc-gantt" style="margin: 0; font-size: 13px; cursor: pointer;" data-i18n="printIncGantt">Incluir Gráfico de Gantt visual</label>
+        </div>
+        <div class="modal-actions footer-right">
+            <button class="btn btn-clear" onclick="fecharModais()" data-i18n="btnCancel">Cancelar (Esc)</button>
+            <button class="btn btn-blue" onclick="executarImpressao()" data-i18n="btnGen">Gerar</button>
+        </div>
+    </div>
+</div>
+
+<div id="theme-overlay" class="theme-overlay"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="script.js" defer></script>
+</body>
+</html>
